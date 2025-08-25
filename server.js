@@ -13,7 +13,7 @@ app.use(express.json());
 
 // Connect to PostgreSQL (Render Postgres)
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_ADDRESSL,
   ssl: { rejectUnauthorized: false }, // required for Render Postgres
 });
 
