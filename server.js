@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import pkg from "pg";
 import bcrypt from "bcrypt";
@@ -10,18 +11,17 @@ const PORT = process.env.PORT || 10000;
 // Parse JSON requests
 app.use(express.json());
 
-// Connect to PostgreSQL
+// Connect to PostgreSQL (Render Postgres)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // required for Render Postgres
-  },
+  ssl: { rejectUnauthorized: false }, // required for Render Postgres
 });
 
-// Create users table if it doesn't exist
+// Create 'users' table if it doesn't exist
 (async () => {
+  const client = await pool.connect();
   try {
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
@@ -31,6 +31,8 @@ const pool = new Pool({
     console.log("Users table ready ✅");
   } catch (err) {
     console.error("Error creating users table:", err);
+  } finally {
+    client.release();
   }
 })();
 
@@ -42,7 +44,8 @@ app.get("/", (req, res) => {
 // Signup route
 app.post("/signup", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Missing fields" });
+  if (!username || !password)
+    return res.status(400).json({ error: "Missing fields" });
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -60,15 +63,22 @@ app.post("/signup", async (req, res) => {
 // Login route
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Missing fields" });
+  if (!username || !password)
+    return res.status(400).json({ error: "Missing fields" });
 
   try {
-    const result = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
-    if (result.rows.length === 0) return res.status(400).json({ error: "Invalid username or password" });
+    const result = await pool.query(
+      "SELECT * FROM users WHERE username = $1",
+      [username]
+    );
+
+    if (result.rows.length === 0)
+      return res.status(400).json({ error: "Invalid username or password" });
 
     const user = result.rows[0];
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ error: "Invalid username or password" });
+    if (!match)
+      return res.status(400).json({ error: "Invalid username or password" });
 
     res.json({ message: `Welcome back, ${username}!` });
   } catch (err) {
