@@ -1,27 +1,80 @@
 import express from "express";
+import pkg from "pg";
+import bcrypt from "bcrypt";
+
+const { Pool } = pkg;
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render will set PORT automatically
+const PORT = process.env.PORT || 10000;
 
-// Middleware so server understands JSON
+// Parse JSON requests
 app.use(express.json());
+
+// Connect to PostgreSQL
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // required for Render Postgres
+  },
+});
+
+// Create users table if it doesn't exist
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+      )
+    `);
+    console.log("Users table ready ✅");
+  } catch (err) {
+    console.error("Error creating users table:", err);
+  }
+})();
 
 // Test route
 app.get("/", (req, res) => {
-  res.send("Backend is working 🚀");
+  res.send("Backend with database is working 🚀");
 });
 
-// Example auth routes
-app.post("/signup", (req, res) => {
+// Signup route
+app.post("/signup", async (req, res) => {
   const { username, password } = req.body;
-  // TODO: save to database (for now, just respond)
-  res.json({ message: `User ${username} signed up!` });
+  if (!username || !password) return res.status(400).json({ error: "Missing fields" });
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await pool.query(
+      "INSERT INTO users (username, password) VALUES ($1, $2)",
+      [username, hashedPassword]
+    );
+    res.json({ message: "User created!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Username may already exist" });
+  }
 });
 
-app.post("/login", (req, res) => {
+// Login route
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  // TODO: check database (for now, just respond)
-  res.json({ message: `User ${username} logged in!` });
+  if (!username || !password) return res.status(400).json({ error: "Missing fields" });
+
+  try {
+    const result = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (result.rows.length === 0) return res.status(400).json({ error: "Invalid username or password" });
+
+    const user = result.rows[0];
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(400).json({ error: "Invalid username or password" });
+
+    res.json({ message: `Welcome back, ${username}!` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 // Start server
