@@ -2,16 +2,24 @@
 import express from "express";
 import pkg from "pg";
 import bcrypt from "bcrypt";
+import cors from "cors";
+
 
 const { Pool } = pkg;
 
 const app = express();
+app.use(cors({
+  origin: "http://127.0.0.1:5500", // allow requests from your local frontend
+  credentials: true // if you plan to send cookies/auth headers
+}));
+
 const PORT = process.env.PORT || 10000;
 
 // Parse JSON requests
 app.use(express.json());
 
 // Connect to PostgreSQL (Render Postgres)
+console.log("DATABASE_ADDRESS =", process.env.DATABASE_VAR);
 const pool = new Pool({
   connectionString: process.env.DATABASE_ADDRESS,
   ssl: { rejectUnauthorized: false }, // required for Render Postgres
@@ -91,3 +99,4 @@ app.post("/login", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
